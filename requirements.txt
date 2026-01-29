@@ -6,3 +6,4 @@ plotly
 fredapi
 finnhub-python
 matplotlib
+statsmodels
