@@ -455,7 +455,7 @@ with tab3:
         st.error(f"Error Deep Dive: {e}")
 
 # ==============================================================================
-# TAB 4: QUANT LAB
+# TAB 4: QUANT LAB (CORREGIDO Y ROBUSTO)
 # ==============================================================================
 with tab4:
     st.header("Laboratorio Cuantitativo")
@@ -467,6 +467,7 @@ with tab4:
 
     col_q1, col_q2, col_q3 = st.columns([1, 2.5, 1.5])
     
+    # --- COLUMNA 1: REFERENCIA ---
     with col_q1:
         st.subheader("📖 Sectores")
         st.caption("ETF de sectores a modo referencial") 
@@ -477,35 +478,75 @@ with tab4:
         df_ref = pd.DataFrame(data_ref)
         st.dataframe(df_ref, height=600, hide_index=True, use_container_width=True)
 
+    # --- COLUMNA 2: MATRIZ ---
     with col_q2:
-        st.subheader("📊 Matriz")
+        st.subheader("📊 Matriz de Correlación")
         txt_mat = st.text_area("Activos", value="SPY, QQQ, IWM, GLD, BTC-USD, NVDA, XLE, XLF, TSLA", height=70, key="mat_tab4")
         if txt_mat:
             lst_mat = list(set([x.strip().upper() for x in txt_mat.split(',') if x.strip()]))
             if len(lst_mat) > 1:
                 try:
-                    d_mat = yf.download(lst_mat, start=start_corr, progress=False, auto_adjust=True)['Close']
-                    if isinstance(d_mat.columns, pd.MultiIndex): d_mat.columns = d_mat.columns.get_level_values(0)
-                    ret_mat = np.log(d_mat / d_mat.shift(1)).dropna()
-                    fig_c = px.imshow(ret_mat.corr(), text_auto=".2f", aspect="auto", color_continuous_scale=[(0, "#FF6C6C"), (0.5, "black"), (1, "#00BBA2")], range_color=[-1, 1], origin='lower')
-                    fig_c.update_layout(height=600, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_c, use_container_width=True)
-                except: st.error("Error matriz.")
+                    # Descarga robusta
+                    d_mat = yf.download(lst_mat, start=start_corr, progress=False, auto_adjust=True)
+                    
+                    # Limpieza de MultiIndex (Corrección clave)
+                    if isinstance(d_mat.columns, pd.MultiIndex):
+                        # Intentamos tomar el nivel 'Close' si existe
+                        try:
+                            d_mat = d_mat.xs('Close', level=0, axis=1)
+                        except:
+                            # Si falla, quizás ya son los precios o está en otro nivel
+                            if 'Close' in d_mat.columns:
+                                d_mat = d_mat['Close']
+                    
+                    # Si después de limpiar sigue siendo complejo, aplanamos
+                    if isinstance(d_mat.columns, pd.MultiIndex):
+                        d_mat.columns = d_mat.columns.get_level_values(-1)
 
+                    ret_mat = np.log(d_mat / d_mat.shift(1)).dropna()
+                    
+                    # Filtramos solo las columnas que tengan datos
+                    valid_cols = [c for c in lst_mat if c in ret_mat.columns]
+                    ret_mat = ret_mat[valid_cols]
+
+                    if not ret_mat.empty:
+                        fig_c = px.imshow(ret_mat.corr(), text_auto=".2f", aspect="auto", 
+                                          color_continuous_scale=[(0, "#FF6C6C"), (0.5, "black"), (1, "#00BBA2")], 
+                                          range_color=[-1, 1], origin='lower')
+                        fig_c.update_layout(height=600, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_c, use_container_width=True)
+                except Exception as e: 
+                    st.error(f"Error calculando matriz: {e}")
+
+    # --- COLUMNA 3: DISPERSIÓN ---
     with col_q3:
-        st.subheader("🔬 Dispersión")
+        st.subheader("🔬 Dispersión (Scatter)")
         c1, c2 = st.columns(2)
         tx = c1.text_input("X", value="SPY", key="tx_tab4").upper().strip()
         ty = c2.text_input("Y", value="TSLA", key="ty_tab4").upper().strip()
         
         if tx and ty:
             try:
-                ds = yf.download([tx, ty], start=start_corr, progress=False, auto_adjust=True)['Close']
-                if isinstance(ds.columns, pd.MultiIndex): ds.columns = ds.columns.get_level_values(0)
+                # Descarga robusta para solo 2 activos
+                ds = yf.download([tx, ty], start=start_corr, progress=False, auto_adjust=True)
+                
+                # Lógica de limpieza idéntica a la matriz
+                if isinstance(ds.columns, pd.MultiIndex):
+                    try:
+                        ds = ds.xs('Close', level=0, axis=1)
+                    except:
+                        if 'Close' in ds.columns: ds = ds['Close']
+                
+                # Aplanado final por seguridad
+                if isinstance(ds.columns, pd.MultiIndex):
+                     ds.columns = ds.columns.get_level_values(-1)
+
                 rs = np.log(ds / ds.shift(1)).dropna()
                 
+                # Verificamos que AMBOS tickers estén en las columnas
                 if tx in rs.columns and ty in rs.columns:
                     x, y = rs[tx]*100, rs[ty]*100
+                    
                     grid_style = dict(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.1)')
 
                     def class_r2(r, r2):
@@ -515,6 +556,7 @@ with tab4:
                         elif r2 < 0.9: return f"{d} Buena", "#00BBA2"
                         else: return f"{d} Fuerte", "#00FF00"
                     
+                    # GRÁFICO 1: GENERAL
                     cv = x.corr(y)
                     r2_gen = cv**2
                     txt, clr = class_r2(cv, r2_gen)
@@ -524,6 +566,7 @@ with tab4:
                     f1.update_layout(height=280, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,t=30,b=0), xaxis=grid_style, yaxis=grid_style)
                     st.plotly_chart(f1, use_container_width=True)
 
+                    # GRÁFICO 2: SOLO CAÍDAS
                     mask = x < 0
                     xd, yd = x[mask], y[mask]
                     if len(xd) > 10:
@@ -531,12 +574,15 @@ with tab4:
                         r2_down = cd**2
                         txtd, clrd = class_r2(cd, r2_down)
                         if r2_down >= 0.7: clrd = "#FF6C6C"
-                        f2 = px.scatter(x=xd, y=yd, trendline="ols", trendline_color_override="#FF6C6C", opacity=0.7, title="Solo Caídas")
+                        f2 = px.scatter(x=xd, y=yd, trendline="ols", trendline_color_override="#FF6C6C", opacity=0.7, title="Solo Caídas (Downside)")
                         f2.update_traces(marker=dict(size=5, color="#FF6C6C"))
                         f2.add_annotation(x=0.05, y=0.95, xref="paper", yref="paper", text=f"<b>R = {cd:.2f}</b><br>R² = {r2_down:.2f}<br><span style='color:{clrd}'>{txtd}</span>", showarrow=False, bgcolor="rgba(0,0,0,0.7)", align="left")
                         f2.update_layout(height=280, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0,r=0,t=30,b=0), xaxis=grid_style, yaxis=grid_style)
                         st.plotly_chart(f2, use_container_width=True)
-            except: st.error("Error Scatter.")
+                else:
+                    st.warning(f"No hay datos coincidentes para {tx} y {ty}. Verifica los tickers.")
+            except Exception as e: 
+                st.error(f"Error en Scatter: {e}")
 
 # ==============================================================================
 # TAB 5: MACRO ROOM (FRED)
@@ -710,4 +756,5 @@ with tab6:
         st.subheader("📬 Contacto")
         st.markdown("**Desarrollado por Mirko Gulin**")
         st.markdown("📧 mirkogulin2001@gmail.com")
+
         st.caption("© 2026 Edge Terminal")
