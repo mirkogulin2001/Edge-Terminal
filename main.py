@@ -585,91 +585,107 @@ with tab4:
                 st.error(f"Error en Scatter: {e}")
 
 # ==============================================================================
-# TAB 5: MACRO ROOM (FRED)
+# TAB 5: MACRO ROOM (MODO DEBUG)
 # ==============================================================================
 with tab5:
     st.header("Monitor Macroeconómico (USA)")
-# FRED_KEY = "tu_clave_real..." <-- BORRA ESTO O COMÉNTALO
-try:
-    FRED_KEY = st.secrets["FRED_KEY"]
-except:
-    FRED_KEY = "CLAVE_NO_ENCONTRADA"
+    
+    # 1. Intentamos leer la clave y mostramos si la encontró o no
     try:
-        fred = Fred(api_key=FRED_KEY)
-        with st.spinner("Cargando Macro..."):
-            cpi = fred.get_series('CPIAUCSL').pct_change(12)*100
-            ppi = fred.get_series('PPIFIS').pct_change(12)*100 
-            ff = fred.get_series('FEDFUNDS')
-            t10 = fred.get_series('DGS10')
-            t2 = fred.get_series('DGS2')
-            un = fred.get_series('UNRATE')
-            sent = fred.get_series('UMCSENT')
-            ind = fred.get_series('INDPRO').pct_change(12)*100
-            ret = fred.get_series('RSAFS').pct_change(12)*100
-            gdp = fred.get_series('GDPC1').pct_change(4)*100
-            spread = (t10 - t2).dropna()
-            
-        start_plot = datetime.today() - timedelta(days=365*10)
-        def layout_pro(tit):
-            grid_style = dict(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.1)')
-            return dict(title=dict(text=tit, font=dict(size=14, color="white")), height=400, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(range=[start_plot, datetime.today()], **grid_style), yaxis=grid_style, margin=dict(l=20,r=20,t=40,b=20), legend=dict(orientation="h", y=1.05))
+        FRED_KEY = st.secrets["FRED_KEY"]
+        st.success(f"✅ Clave FRED encontrada. Primeros carácteres: {FRED_KEY[:4]}...")
+    except Exception as e:
+        st.error(f"❌ No se pudo leer el secreto 'FRED_KEY'. Error: {e}")
+        st.stop() # Detenemos aquí si no hay clave
 
-        c_m1, c_m2 = st.columns(2)
-        with c_m1:
-            fi = go.Figure()
-            fi.add_trace(go.Scatter(x=cpi.index, y=cpi, name="CPI", line=dict(color='#00BBA2', width=2)))
-            fi.add_trace(go.Scatter(x=ppi.index, y=ppi, name="PPI (Final)", line=dict(color='#FFF671', width=1.5)))
-            fi.add_hline(y=2, line_dash="dash", line_color="gray")
-            fi.update_layout(layout_pro("Inflación (CPI vs PPI)"), yaxis_title="%")
-            st.plotly_chart(fi, use_container_width=True)
-        with c_m2:
-            fr = go.Figure()
-            fr.add_trace(go.Scatter(x=ff.index, y=ff, name="Fed Rate", line=dict(color='#00FF00', width=2)))
-            fr.add_trace(go.Scatter(x=t10.index, y=t10, name="10Y Bond", line=dict(color='#FFFFFF', width=1.5, dash='dot')))
-            fr.update_layout(layout_pro("Tasas"), yaxis_title="%")
-            st.plotly_chart(fr, use_container_width=True)
+    # 2. Intentamos conectar sin protección para ver el error real
+    fred = Fred(api_key=FRED_KEY)
+    
+    st.write("🔄 Intentando descargar datos de FRED...")
+    
+    # Probamos descargar UNA sola serie simple primero
+    try:
+        test_data = fred.get_series('GDP')
+        st.success("✅ Conexión con FRED exitosa. Descargando resto de datos...")
+    except Exception as e:
+        st.error(f"❌ Error conectando con FRED: {e}")
+        st.stop()
 
-        c_m3, c_m4 = st.columns(2)
-        with c_m3:
-            fs = go.Figure()
-            fs.add_trace(go.Scatter(x=spread.index, y=spread, name="10Y-2Y", line=dict(color='#FFFFFF')))
-            fs.add_hline(y=0, line_color="#FF6C6C", line_width=2)
-            fs.update_layout(layout_pro("Curva (Spread 10Y-2Y)"))
-            st.plotly_chart(fs, use_container_width=True)
-        with c_m4:
-            fu = go.Figure()
-            fu.add_trace(go.Scatter(x=un.index, y=un, name="Desempleo", line=dict(color='#00BFFF', width=2)))
-            fu.update_layout(layout_pro("Desempleo"), yaxis_title="%")
-            st.plotly_chart(fu, use_container_width=True)
+    # 3. Si pasó la prueba, descargamos el resto (sin try/except global para ver fallos)
+    with st.spinner("Descargando indicadores..."):
+        cpi = fred.get_series('CPIAUCSL').pct_change(12)*100
+        ppi = fred.get_series('PPIFIS').pct_change(12)*100 
+        ff = fred.get_series('FEDFUNDS')
+        t10 = fred.get_series('DGS10')
+        t2 = fred.get_series('DGS2')
+        un = fred.get_series('UNRATE')
+        sent = fred.get_series('UMCSENT')
+        ind = fred.get_series('INDPRO').pct_change(12)*100
+        ret = fred.get_series('RSAFS').pct_change(12)*100
+        gdp = fred.get_series('GDPC1').pct_change(4)*100
+        spread = (t10 - t2).dropna()
+        
+    start_plot = datetime.today() - timedelta(days=365*10)
+    
+    def layout_pro(tit):
+        grid_style = dict(showgrid=True, gridwidth=1, gridcolor='rgba(255, 255, 255, 0.1)')
+        return dict(title=dict(text=tit, font=dict(size=14, color="white")), height=400, template="plotly_dark", paper_bgcolor='rgba(0,0,0,0)', xaxis=dict(range=[start_plot, datetime.today()], **grid_style), yaxis=grid_style, margin=dict(l=20,r=20,t=40,b=20), legend=dict(orientation="h", y=1.05))
 
-        c_m5, c_m6 = st.columns(2)
-        with c_m5:
-            fp = go.Figure()
-            fp.add_trace(go.Scatter(x=ind.index, y=ind, name="Ind. Prod", line=dict(color='#FF9F40'), fill='tozeroy', fillcolor='rgba(255,159,64,0.1)'))
-            fp.add_hline(y=0, line_color="gray")
-            fp.update_layout(layout_pro("Producción Ind. (YoY)"), yaxis_title="%")
-            st.plotly_chart(fp, use_container_width=True)
-        with c_m6:
-            fss = go.Figure()
-            fss.add_trace(go.Scatter(x=sent.index, y=sent, name="Confianza", line=dict(color='#9966FF')))
-            fss.update_layout(layout_pro("Sentimiento Consumidor"), yaxis_title="Idx")
-            st.plotly_chart(fss, use_container_width=True)
+    # Renderizado de gráficos
+    c_m1, c_m2 = st.columns(2)
+    with c_m1:
+        fi = go.Figure()
+        fi.add_trace(go.Scatter(x=cpi.index, y=cpi, name="CPI", line=dict(color='#00BBA2', width=2)))
+        fi.add_trace(go.Scatter(x=ppi.index, y=ppi, name="PPI (Final)", line=dict(color='#FFF671', width=1.5)))
+        fi.add_hline(y=2, line_dash="dash", line_color="gray")
+        fi.update_layout(layout_pro("Inflación (CPI vs PPI)"), yaxis_title="%")
+        st.plotly_chart(fi, use_container_width=True)
+    with c_m2:
+        fr = go.Figure()
+        fr.add_trace(go.Scatter(x=ff.index, y=ff, name="Fed Rate", line=dict(color='#00FF00', width=2)))
+        fr.add_trace(go.Scatter(x=t10.index, y=t10, name="10Y Bond", line=dict(color='#FFFFFF', width=1.5, dash='dot')))
+        fr.update_layout(layout_pro("Tasas"), yaxis_title="%")
+        st.plotly_chart(fr, use_container_width=True)
 
-        c_m7, c_m8 = st.columns(2)
-        with c_m7:
-            frt = go.Figure()
-            frt.add_trace(go.Scatter(x=ret.index, y=ret, name="Retail", line=dict(color='#FF6384')))
-            frt.add_hline(y=0, line_color="gray")
-            frt.update_layout(layout_pro("Ventas Retail (YoY)"), yaxis_title="%")
-            st.plotly_chart(frt, use_container_width=True)
-        with c_m8:
-            fg = go.Figure()
-            fg.add_trace(go.Bar(x=gdp.index, y=gdp, name="GDP", marker_color='#4BC0C0'))
-            fg.add_hline(y=0, line_color="gray")
-            fg.update_layout(layout_pro("GDP Real (YoY)"), yaxis_title="%")
-            st.plotly_chart(fg, use_container_width=True)
-    except: st.error("Error FRED.")
+    c_m3, c_m4 = st.columns(2)
+    with c_m3:
+        fs = go.Figure()
+        fs.add_trace(go.Scatter(x=spread.index, y=spread, name="10Y-2Y", line=dict(color='#FFFFFF')))
+        fs.add_hline(y=0, line_color="#FF6C6C", line_width=2)
+        fs.update_layout(layout_pro("Curva (Spread 10Y-2Y)"))
+        st.plotly_chart(fs, use_container_width=True)
+    with c_m4:
+        fu = go.Figure()
+        fu.add_trace(go.Scatter(x=un.index, y=un, name="Desempleo", line=dict(color='#00BFFF', width=2)))
+        fu.update_layout(layout_pro("Desempleo"), yaxis_title="%")
+        st.plotly_chart(fu, use_container_width=True)
 
+    c_m5, c_m6 = st.columns(2)
+    with c_m5:
+        fp = go.Figure()
+        fp.add_trace(go.Scatter(x=ind.index, y=ind, name="Ind. Prod", line=dict(color='#FF9F40'), fill='tozeroy', fillcolor='rgba(255,159,64,0.1)'))
+        fp.add_hline(y=0, line_color="gray")
+        fp.update_layout(layout_pro("Producción Ind. (YoY)"), yaxis_title="%")
+        st.plotly_chart(fp, use_container_width=True)
+    with c_m6:
+        fss = go.Figure()
+        fss.add_trace(go.Scatter(x=sent.index, y=sent, name="Confianza", line=dict(color='#9966FF')))
+        fss.update_layout(layout_pro("Sentimiento Consumidor"), yaxis_title="Idx")
+        st.plotly_chart(fss, use_container_width=True)
+
+    c_m7, c_m8 = st.columns(2)
+    with c_m7:
+        frt = go.Figure()
+        frt.add_trace(go.Scatter(x=ret.index, y=ret, name="Retail", line=dict(color='#FF6384')))
+        frt.add_hline(y=0, line_color="gray")
+        frt.update_layout(layout_pro("Ventas Retail (YoY)"), yaxis_title="%")
+        st.plotly_chart(frt, use_container_width=True)
+    with c_m8:
+        fg = go.Figure()
+        fg.add_trace(go.Bar(x=gdp.index, y=gdp, name="GDP", marker_color='#4BC0C0'))
+        fg.add_hline(y=0, line_color="gray")
+        fg.update_layout(layout_pro("GDP Real (YoY)"), yaxis_title="%")
+        st.plotly_chart(fg, use_container_width=True)
 # ==============================================================================
 # TAB 6: INFORMACIÓN Y METODOLOGÍA
 # ==============================================================================
@@ -758,3 +774,4 @@ with tab6:
         st.markdown("📧 mirkogulin2001@gmail.com")
 
         st.caption("© 2026 Edge Terminal")
+
