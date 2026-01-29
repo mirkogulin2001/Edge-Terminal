@@ -1,8 +1,0 @@
-streamlit
-pandas
-yfinance
-numpy
-plotly
-fredapi
-finnhub-python
-matplotlib
